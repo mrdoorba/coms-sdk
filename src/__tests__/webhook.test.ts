@@ -8,28 +8,28 @@ const PAYLOAD = '{"event":"user.provisioned","data":{}}'
 describe('verifyWebhookSignature', () => {
   it('returns true for a valid signature', () => {
     const sig = signWebhookPayload(SECRET, TIMESTAMP, PAYLOAD)
-    expect(verifyWebhookSignature(PAYLOAD, sig, SECRET, TIMESTAMP)).toBe(true)
+    expect(verifyWebhookSignature(SECRET, TIMESTAMP, PAYLOAD, sig)).toBe(true)
   })
 
   it('returns false when secret is wrong', () => {
     const sig = signWebhookPayload(SECRET, TIMESTAMP, PAYLOAD)
-    expect(verifyWebhookSignature(PAYLOAD, sig, 'wrong-secret', TIMESTAMP)).toBe(false)
+    expect(verifyWebhookSignature('wrong-secret', TIMESTAMP, PAYLOAD, sig)).toBe(false)
   })
 
   it('returns false when payload is tampered', () => {
     const sig = signWebhookPayload(SECRET, TIMESTAMP, PAYLOAD)
-    expect(verifyWebhookSignature('{"tampered":true}', sig, SECRET, TIMESTAMP)).toBe(false)
+    expect(verifyWebhookSignature(SECRET, TIMESTAMP, '{"tampered":true}', sig)).toBe(false)
   })
 
   it('returns false when timestamp is tampered', () => {
     const sig = signWebhookPayload(SECRET, TIMESTAMP, PAYLOAD)
-    expect(verifyWebhookSignature(PAYLOAD, sig, SECRET, '9999999999')).toBe(false)
+    expect(verifyWebhookSignature(SECRET, '9999999999', PAYLOAD, sig)).toBe(false)
   })
 
   it('returns false when signature has different length (constant-time guard)', () => {
     const valid = signWebhookPayload(SECRET, TIMESTAMP, PAYLOAD)
-    expect(verifyWebhookSignature(PAYLOAD, valid + 'x', SECRET, TIMESTAMP)).toBe(false)
-    expect(verifyWebhookSignature(PAYLOAD, valid.slice(0, -1), SECRET, TIMESTAMP)).toBe(false)
+    expect(verifyWebhookSignature(SECRET, TIMESTAMP, PAYLOAD, valid + 'x')).toBe(false)
+    expect(verifyWebhookSignature(SECRET, TIMESTAMP, PAYLOAD, valid.slice(0, -1))).toBe(false)
   })
 
   it('produces sha256=hex(...) format', () => {
@@ -38,10 +38,9 @@ describe('verifyWebhookSignature', () => {
   })
 
   it('uses constant-time comparison (timingSafeEqual, not string ===)', () => {
-    // Construct a signature with same length but different bytes
     const valid = signWebhookPayload(SECRET, TIMESTAMP, PAYLOAD)
     const tampered = valid.slice(0, -2) + '00'
-    expect(verifyWebhookSignature(PAYLOAD, tampered, SECRET, TIMESTAMP)).toBe(false)
+    expect(verifyWebhookSignature(SECRET, TIMESTAMP, PAYLOAD, tampered)).toBe(false)
   })
 })
 
@@ -54,6 +53,6 @@ describe('signWebhookPayload', () => {
 
   it('is cross-verified by verifyWebhookSignature', () => {
     const sig = signWebhookPayload('my-secret', '1234567890', '{"hello":"world"}')
-    expect(verifyWebhookSignature('{"hello":"world"}', sig, 'my-secret', '1234567890')).toBe(true)
+    expect(verifyWebhookSignature('my-secret', '1234567890', '{"hello":"world"}', sig)).toBe(true)
   })
 })

@@ -62,7 +62,7 @@ const body = await request.text()
 const signature = request.headers.get('x-portal-webhook-signature') ?? ''
 const timestamp = request.headers.get('x-portal-webhook-timestamp') ?? ''
 
-if (!verifyWebhookSignature(body, signature, process.env.WEBHOOK_SECRET!, timestamp)) {
+if (!verifyWebhookSignature(process.env.WEBHOOK_SECRET!, timestamp, body, signature)) {
   return new Response('Invalid signature', { status: 401 })
 }
 

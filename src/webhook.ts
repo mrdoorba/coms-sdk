@@ -15,21 +15,21 @@ function computeSignature(secret: string, timestamp: string, payload: string): s
 /**
  * Verify a COMS portal webhook signature using constant-time comparison.
  *
- * @param payload - The raw request body string (JSON)
- * @param signature - The value of the PORTAL_WEBHOOK_SIGNATURE_HEADER header
  * @param secret - The per-endpoint shared secret
  * @param timestamp - The value of the PORTAL_WEBHOOK_TIMESTAMP_HEADER header
+ * @param rawBody - The raw request body string (JSON, before parsing)
+ * @param signatureHeader - The value of the PORTAL_WEBHOOK_SIGNATURE_HEADER header
  * @returns true if the signature is valid, false otherwise
  */
 export function verifyWebhookSignature(
-  payload: string,
-  signature: string,
   secret: string,
   timestamp: string,
+  rawBody: string,
+  signatureHeader: string,
 ): boolean {
-  const expected = computeSignature(secret, timestamp, payload)
-  if (signature.length !== expected.length) return false
-  const a = Buffer.from(signature)
+  const expected = computeSignature(secret, timestamp, rawBody)
+  if (signatureHeader.length !== expected.length) return false
+  const a = Buffer.from(signatureHeader)
   const b = Buffer.from(expected)
   if (a.length !== b.length) return false
   return timingSafeEqual(a, b)
