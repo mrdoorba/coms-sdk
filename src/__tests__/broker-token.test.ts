@@ -6,7 +6,7 @@ import {
   importJWK,
   type KeyLike,
 } from 'jose'
-import { verifyBrokerToken, BrokerTokenError } from '../broker-token.js'
+import { verifyBrokerToken, BrokerTokenError, getJwks } from '../broker-token.js'
 
 // Shared test fixtures
 const APP_SLUG = 'test-app'
@@ -240,5 +240,20 @@ describe('BrokerTokenError', () => {
       expect((err as BrokerTokenError).name).toBe('BrokerTokenError')
       expect((err as BrokerTokenError).code).toBe('expired')
     }
+  })
+})
+
+describe('getJwks — module-level cache', () => {
+  it('returns the same RemoteJWKSet instance for the same URL (reference equality)', () => {
+    const url = 'https://portal.example.com/.well-known/jwks.json'
+    const first = getJwks(url)
+    const second = getJwks(url)
+    expect(first).toBe(second)
+  })
+
+  it('returns distinct instances for different URLs', () => {
+    const a = getJwks('https://portal-a.example.com/.well-known/jwks.json')
+    const b = getJwks('https://portal-b.example.com/.well-known/jwks.json')
+    expect(a).not.toBe(b)
   })
 })

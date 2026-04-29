@@ -2,6 +2,18 @@ import { jwtVerify, decodeProtectedHeader, createRemoteJWKSet } from 'jose'
 import type { JWTPayload, JWTVerifyOptions } from 'jose'
 import { BrokerTokenError } from './errors.js'
 
+const jwksCache = new Map<string, ReturnType<typeof createRemoteJWKSet>>()
+
+/** @internal — exported for testing only */
+export function getJwks(url: string): ReturnType<typeof createRemoteJWKSet> {
+  let jwks = jwksCache.get(url)
+  if (!jwks) {
+    jwks = createRemoteJWKSet(new URL(url))
+    jwksCache.set(url, jwks)
+  }
+  return jwks
+}
+
 export { BrokerTokenError }
 
 export type BrokerTokenPayload = JWTPayload & {
@@ -108,7 +120,7 @@ export async function verifyBrokerToken(
         throw new BrokerTokenError('missing_kid', 'ES256 broker token missing kid header')
       }
 
-      const JWKS = createRemoteJWKSet(new URL(options.jwksUrl))
+      const JWKS = getJwks(options.jwksUrl)
       const { payload } = await jwtVerify<BrokerTokenPayload>(token, JWKS, verifyOpts)
       return payload
     }
