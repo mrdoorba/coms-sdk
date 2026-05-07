@@ -1,6 +1,6 @@
 {
   "name": "@coms-portal/sdk",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Framework-neutral SDK for COMS portal integrators",
   "type": "module",
   "license": "UNLICENSED",
@@ -12,6 +12,10 @@
     ".": {
       "import": "./src/index.ts",
       "types": "./src/index.ts"
+    },
+    "./elysia": {
+      "import": "./src/elysia.ts",
+      "types": "./src/elysia.ts"
     }
   },
   "bin": {
@@ -29,15 +33,20 @@
     "jose": "^6"
   },
   "peerDependencies": {
+    "elysia": "^1",
     "google-auth-library": "^9 || ^10"
   },
   "peerDependenciesMeta": {
+    "elysia": {
+      "optional": true
+    },
     "google-auth-library": {
       "optional": true
     }
   },
   "devDependencies": {
     "@types/bun": "latest",
+    "elysia": "^1",
     "google-auth-library": "^10",
     "typescript": "^5.9.3"
   }

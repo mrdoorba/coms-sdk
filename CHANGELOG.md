@@ -15,6 +15,20 @@ locks the surface under semver. The v0.1.x surface (`verifyBrokerToken`,
 1.x line — the v1.0 additions are purely additive. HS256 verification stays
 in v1.x and is removed in v2.0 once Heroes Phase 7 lands.
 
+### Added in 0.7.0
+
+- **Elysia adapter at `@coms-portal/sdk/elysia`.** New subpath ships
+  `requireBrokerAuth(options)` — an Elysia plugin that gates downstream
+  routes on a valid portal broker token, attaches `user:
+  BrokerTokenPayload` to the route context on success, and throws 401
+  with a structured `{ error: 'unauthorized', code: BrokerTokenErrorCode }`
+  body on any failure (`expired` / `invalid_signature` /
+  `invalid_audience` / `invalid_issuer` / `missing_kid` / `unknown_kid` /
+  `malformed` / `missing_token`). H-apps drop ~30 lines of bespoke auth
+  middleware and gain a single source of truth for broker-token decode.
+- **Optional peer dep on Elysia (`^1`).** No runtime dep added — H-apps
+  that import only the framework-neutral surface are unaffected.
+
 ### Added in 0.6.0
 
 - **`coms-portal-cli` binary.** `bun add @coms-portal/sdk` now puts a
