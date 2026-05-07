@@ -15,6 +15,29 @@ locks the surface under semver. The v0.1.x surface (`verifyBrokerToken`,
 1.x line — the v1.0 additions are purely additive. HS256 verification stays
 in v1.x and is removed in v2.0 once Heroes Phase 7 lands.
 
+### Added in 0.5.0
+
+- **Manifest authoring helpers.** `defineManifest(def)` is an identity
+  function that constrains the input to the `ManifestDefinition` shape so
+  H-app authors get TypeScript-checked `configSchema` field types in their
+  `portal-manifest.ts` without runtime cost. The `ManifestDefinition`,
+  `ConfigField`, `FieldType` types (and their per-variant siblings:
+  `EnumField`, `BooleanField`, `IntegerField`, `StringField`) are now
+  exported from the top of the SDK.
+- **`registerManifest(opts)`.** Runtime client that POSTs the manifest to
+  the portal's new `POST /api/v1/apps/:slug/manifest` endpoint. Defaults
+  to a lazy `google-auth-library` import for OIDC ID-token minting (works
+  automatically on Cloud Run / GCB / GCE workloads via Application Default
+  Credentials); accepts a custom `getIdToken` for tests or alternate auth
+  paths. Returns `{ schemaVersion, registeredAt }`. `google-auth-library`
+  is now declared as an optional peer dependency (`^9 || ^10`).
+- **Portal-side route shipped alongside this SDK release** (separate
+  commit in `mrdoorba/coms_portal`). The portal accepts the SDK's manifest
+  payload at `POST /api/v1/apps/:slug/manifest` under `requireAppToken`,
+  rejects slug-mismatch with 409, malformed `configSchema` with 422, and
+  delegates the idempotent UPSERT to the existing
+  `services/manifests.ts:registerManifest`.
+
 ### Added in 0.4.0
 
 - **Contract-version constants.** `PORTAL_AUTH_CONTRACT_VERSION` and

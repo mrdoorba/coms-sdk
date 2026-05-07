@@ -41,6 +41,21 @@ export type {
   ContractVersionMismatchCode,
 } from './contract-version.js'
 
+// === v1.0 — manifest helpers (PR D) ===
+
+export { defineManifest, registerManifest } from './manifest.js'
+export type {
+  ManifestDefinition,
+  ConfigField,
+  FieldType,
+  EnumField,
+  BooleanField,
+  IntegerField,
+  StringField,
+  RegisterManifestOptions,
+  RegisterManifestResponse,
+} from './manifest.js'
+
 // === v1.0 — re-exports from @coms-portal/shared (Q2: single import source) ===
 
 export type {

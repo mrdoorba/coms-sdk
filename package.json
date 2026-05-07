@@ -1,6 +1,6 @@
 {
   "name": "@coms-portal/sdk",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Framework-neutral SDK for COMS portal integrators",
   "type": "module",
   "license": "UNLICENSED",
@@ -25,8 +25,17 @@
     "@coms-portal/shared": "git+https://github.com/mrdoorba/coms-shared.git#v1.6.0",
     "jose": "^6"
   },
+  "peerDependencies": {
+    "google-auth-library": "^9 || ^10"
+  },
+  "peerDependenciesMeta": {
+    "google-auth-library": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@types/bun": "latest",
+    "google-auth-library": "^10",
     "typescript": "^5.9.3"
   }
 }
