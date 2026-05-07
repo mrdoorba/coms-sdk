@@ -56,6 +56,19 @@ export type {
   RegisterManifestResponse,
 } from './manifest.js'
 
+// === v1.3 — onboarding smoketest (Rev 4 Spec 06 PR B) ===
+
+export { runSmoketest } from './smoketest.js'
+export type {
+  RunSmoketestOptions,
+  SmoketestResult,
+  SmoketestStepRegistry,
+  SmoketestStepAppUrl,
+  SmoketestStepWebhook,
+  SmoketestAppSummary,
+  SmoketestEndpointResult,
+} from './smoketest.js'
+
 // === v1.0 — re-exports from @coms-portal/shared (Q2: single import source) ===
 
 export type {

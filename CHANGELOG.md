@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-05-07
+
+Additive: new `runSmoketest` programmatic API and `coms-portal-cli smoketest <slug>` verb (Rev 4 Spec 06 PR B).
+
+`runSmoketest({ portalUrl, appSlug, getIdToken })` exercises the integration end-to-end and returns a structured per-step result:
+
+- **Step 1 — Registry check.** POST `<portalUrl>/api/v1/apps/<slug>/smoketest` (OIDC-authed, audience = `portalUrl`). Confirms the app is registered and active; returns the registry summary (`{ id, slug, name, url, status, handoffMode }`) plus per-endpoint webhook dispatch results in one call.
+- **Step 2 — App URL reachable.** GET `<app.url><healthPath>` (default `/`, override via `healthPath` option). Default 5s timeout. 2xx → step passes.
+- **Step 3 — Webhook delivery.** Pass-through of the portal's per-endpoint dispatch results. The portal already synthesised an `app.smoketest` envelope and sent it to every active endpoint; receivers are expected to ack 2xx without business processing.
+
+The CLI verb wraps `runSmoketest` and renders a three-step report:
+
+```
+[1/3] Registry check     → app registered, status=active, handoff_mode=one_time_code
+[2/3] App URL reachable  → GET https://your-app.example/
+                            ✓ 200 OK (134ms)
+[3/3] Webhook delivery   → POST <portal>/api/v1/apps/<slug>/smoketest
+                            ✓ endpoint=https://your-app.example/webhook  status=200  latency=87ms
+
+Smoketest OK.
+```
+
+Exit codes mirror `register-manifest`: 0 success; 1 auth failure (401/403); 2 validation (slug not registered, missing args); 3 network/portal (5xx, app URL unreachable, webhook endpoint failure). Same auth resolution: `COMS_PORTAL_CLI_OIDC_TOKEN` (production CD) → `COMS_PORTAL_CLI_TEST_TOKEN` (tests) → ADC (Cloud Run / GCB / GCE / local).
+
+Pure additive — v1.2.x consumers are unaffected. Requires the portal to expose `POST /api/v1/apps/:slug/smoketest`, which landed in `mrdoorba/coms_portal` commit `fa78164` (Rev 4 Spec 06 PR A).
+
 ## [1.2.0] - 2026-05-07
 
 Additive: `coms-portal-cli register-manifest` now accepts a pre-minted OIDC ID token via `COMS_PORTAL_CLI_OIDC_TOKEN`.

@@ -15,8 +15,9 @@ import { parseArgs } from 'node:util'
 import { resolve as resolvePath } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { registerManifest, type ManifestDefinition } from './manifest.js'
+import { runSmoketest, type SmoketestResult } from './smoketest.js'
 
-const HELP = `coms-portal-cli — register an H-app's portal manifest
+const HELP = `coms-portal-cli — CD-pipeline helper for COMS portal integrators
 
 Usage:
   coms-portal-cli register-manifest \\
@@ -24,7 +25,12 @@ Usage:
     --app-slug <slug> \\
     --manifest <path>
 
-Auth (in priority order):
+  coms-portal-cli smoketest \\
+    --portal-url <url> \\
+    --app-slug <slug> \\
+    [--health-path <path>]      # default '/'
+
+Auth (in priority order, both verbs):
   1. COMS_PORTAL_CLI_OIDC_TOKEN env var — a pre-minted OIDC ID token
      whose audience equals --portal-url. Use this in CD pipelines that
      mint tokens externally (e.g. google-github-actions/auth with
@@ -156,6 +162,154 @@ async function runRegisterManifest(rest: string[]): Promise<void> {
   )
 }
 
+// ---------------------------------------------------------------------------
+// smoketest verb (Spec 06 Rev 4 PR B)
+// ---------------------------------------------------------------------------
+
+function formatSmoketestReport(result: SmoketestResult): string {
+  const lines: string[] = []
+
+  // [1/3] Registry check
+  if (result.steps.registry.ok && result.steps.registry.app) {
+    const a = result.steps.registry.app
+    lines.push(
+      `[1/3] Registry check     → app registered, status=${a.status}, handoff_mode=${a.handoffMode}`,
+    )
+  } else {
+    lines.push(`[1/3] Registry check     → FAILED: ${result.steps.registry.error ?? 'unknown error'}`)
+  }
+
+  // [2/3] App URL reachable
+  if (result.steps.registry.ok) {
+    if (result.steps.appUrl.ok) {
+      lines.push(`[2/3] App URL reachable  → GET ${result.steps.appUrl.url}`)
+      lines.push(`                            ✓ ${result.steps.appUrl.status} OK (${result.steps.appUrl.latencyMs}ms)`)
+    } else {
+      const probedUrl = result.steps.appUrl.url ?? '(skipped)'
+      const reason =
+        result.steps.appUrl.status !== undefined
+          ? `${result.steps.appUrl.status} ${result.steps.appUrl.error ?? ''}`.trim()
+          : (result.steps.appUrl.error ?? 'unknown error')
+      lines.push(`[2/3] App URL reachable  → GET ${probedUrl}`)
+      lines.push(`                            ✗ ${reason}`)
+    }
+  } else {
+    lines.push(`[2/3] App URL reachable  → SKIPPED (step 1 failed)`)
+  }
+
+  // [3/3] Webhook delivery
+  if (result.steps.registry.ok) {
+    lines.push(`[3/3] Webhook delivery   → POST <portal>/api/v1/apps/<slug>/smoketest`)
+    if (result.steps.webhook.endpoints.length === 0) {
+      lines.push(`                            (no webhook endpoints registered)`)
+    } else {
+      for (const ep of result.steps.webhook.endpoints) {
+        const mark = ep.status !== null && ep.status >= 200 && ep.status < 300 ? '✓' : '✗'
+        const errSuffix = ep.error ? `  error="${ep.error}"` : ''
+        lines.push(
+          `                            ${mark} endpoint=${ep.url}  status=${ep.status ?? 'null'}  latency=${ep.latencyMs}ms${errSuffix}`,
+        )
+      }
+    }
+  } else {
+    lines.push(`[3/3] Webhook delivery   → SKIPPED (step 1 failed)`)
+  }
+
+  lines.push(result.ok ? '' : '')
+  lines.push(result.ok ? 'Smoketest OK.' : 'Smoketest FAILED.')
+  return lines.join('\n')
+}
+
+async function runSmoketestCli(rest: string[]): Promise<void> {
+  let parsed: { values: Record<string, string | undefined> }
+  try {
+    parsed = parseArgs({
+      args: rest,
+      options: {
+        'portal-url': { type: 'string' },
+        'app-slug': { type: 'string' },
+        'health-path': { type: 'string' },
+      },
+      strict: true,
+    }) as { values: Record<string, string | undefined> }
+  } catch (err) {
+    exitWithError(2, `invalid arguments: ${(err as Error).message}`)
+  }
+
+  const portalUrl = parsed.values['portal-url']
+  const appSlug = parsed.values['app-slug']
+  const healthPath = parsed.values['health-path']
+
+  if (!portalUrl || !appSlug) {
+    process.stderr.write(HELP + '\n')
+    exitWithError(2, 'missing required arguments: --portal-url and --app-slug are both required')
+  }
+
+  // Same auth-token resolution as register-manifest. The two env vars are
+  // intentionally distinct from each other: TEST_TOKEN exists for unit tests
+  // so they don't need a working metadata server, OIDC_TOKEN is the
+  // production CD-pipeline path for WIF + impersonation chains.
+  const testToken = process.env.COMS_PORTAL_CLI_TEST_TOKEN
+  const oidcToken = process.env.COMS_PORTAL_CLI_OIDC_TOKEN
+  const getIdToken = testToken
+    ? async () => testToken
+    : oidcToken
+      ? async () => oidcToken
+      : async (audience: string) => {
+          // Mirror manifest.ts:defaultGetIdToken so the smoketest CLI works
+          // out of the box on Cloud Run / GCB / GCE without an explicit
+          // env-var. Lazy import keeps consumers without google-auth-library
+          // (e.g. tests) from paying the load cost.
+          const mod = await import('google-auth-library')
+          const auth = new mod.GoogleAuth()
+          const client = await auth.getIdTokenClient(audience)
+          const headers = await client.getRequestHeaders()
+          let bearer: string | undefined
+          if (headers instanceof Headers) {
+            bearer = headers.get('Authorization') ?? undefined
+          } else if (headers && typeof headers === 'object') {
+            bearer = (headers as Record<string, string>).Authorization
+          }
+          if (!bearer || !bearer.startsWith('Bearer ')) {
+            throw new Error('google-auth-library returned no Bearer token')
+          }
+          return bearer.slice('Bearer '.length)
+        }
+
+  let result: SmoketestResult
+  try {
+    result = await runSmoketest({
+      portalUrl,
+      appSlug,
+      getIdToken,
+      ...(healthPath ? { healthPath } : {}),
+    })
+  } catch (err) {
+    // runSmoketest does not throw on contract failures, only on programmer
+    // error. Treat as a network/portal class.
+    exitWithError(3, `smoketest crashed: ${(err as Error).message}`)
+  }
+
+  const report = formatSmoketestReport(result)
+  process.stdout.write(`${report}\n`)
+
+  if (result.ok) return
+
+  // Map the failed step → exit code, mirroring register-manifest's classes.
+  if (!result.steps.registry.ok) {
+    const err = result.steps.registry.error ?? ''
+    if (/\b40[13]\b/.test(err) || /unauthorized|forbidden|missing_token/i.test(err)) {
+      process.exit(1) // auth failure
+    }
+    if (/\b40[49]\b/.test(err) || /not registered|not active/i.test(err)) {
+      process.exit(2) // validation: unregistered or inactive
+    }
+    process.exit(3) // network / portal 5xx
+  }
+  // Step 2 or 3 failure — both are network/portal class.
+  process.exit(3)
+}
+
 async function main(): Promise<void> {
   const argv = process.argv.slice(2)
 
@@ -169,6 +323,10 @@ async function main(): Promise<void> {
 
   if (sub === 'register-manifest') {
     await runRegisterManifest(rest)
+    return
+  }
+  if (sub === 'smoketest') {
+    await runSmoketestCli(rest)
     return
   }
 

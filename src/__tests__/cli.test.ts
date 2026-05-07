@@ -141,6 +141,264 @@ describe('coms-portal-cli register-manifest', () => {
     expect(res.exitCode).toBe(2)
   })
 
+  // -------------------------------------------------------------------------
+  // smoketest verb (Spec 06 Rev 4 PR B) — exercise via spawned bun process.
+  // We host a fake portal that responds to POST /api/v1/apps/:slug/smoketest
+  // and a fake app server whose URL the portal returns in `app.url`. The
+  // CLI should hit the portal, then probe the app's `/`, then render the
+  // three-step report.
+  // -------------------------------------------------------------------------
+
+  describe('smoketest verb', () => {
+    interface FakePortalState {
+      response: { status: number; body: unknown }
+      lastAuth: string | null
+    }
+
+    function startFakePortal(state: FakePortalState, appUrl: string) {
+      return Bun.serve({
+        port: 0,
+        async fetch(req) {
+          const url = new URL(req.url)
+          if (url.pathname.endsWith('/smoketest') && req.method === 'POST') {
+            state.lastAuth = req.headers.get('authorization')
+            // Stitch app.url into the response body if the test passed a
+            // sentinel — keeps tests from caring about the dynamic port.
+            const body = JSON.parse(JSON.stringify(state.response.body))
+            if (body && body.app && body.app.url === '__APP_URL__') {
+              body.app.url = appUrl
+            }
+            if (Array.isArray(body?.endpoints)) {
+              body.endpoints = body.endpoints.map(
+                (e: { url?: string } & Record<string, unknown>) =>
+                  e.url === '__APP_URL__/webhook' ? { ...e, url: `${appUrl}/webhook` } : e,
+              )
+            }
+            return new Response(JSON.stringify(body), {
+              status: state.response.status,
+              headers: { 'Content-Type': 'application/json' },
+            })
+          }
+          return new Response('not found', { status: 404 })
+        },
+      })
+    }
+
+    function startFakeApp(opts: { rootStatus?: number; rootDelayMs?: number }) {
+      return Bun.serve({
+        port: 0,
+        async fetch(req) {
+          const url = new URL(req.url)
+          if (url.pathname === '/' && req.method === 'GET') {
+            if (opts.rootDelayMs) await new Promise((r) => setTimeout(r, opts.rootDelayMs))
+            return new Response('', { status: opts.rootStatus ?? 200 })
+          }
+          if (url.pathname === '/healthz' && req.method === 'GET') {
+            return new Response('', { status: 200 })
+          }
+          return new Response('not found', { status: 404 })
+        },
+      })
+    }
+
+    it('exit 0 on a fully-green smoketest; renders the three-step report', async () => {
+      const fakeApp = startFakeApp({ rootStatus: 200 })
+      const appUrl = `http://localhost:${fakeApp.port}`
+      const state: FakePortalState = {
+        lastAuth: null,
+        response: {
+          status: 200,
+          body: {
+            app: {
+              id: 'app-1', slug: 'fast', name: 'Fast', url: '__APP_URL__',
+              status: 'active', handoffMode: 'one_time_code',
+            },
+            endpoints: [
+              { endpointId: 'ep-1', url: '__APP_URL__/webhook', status: 200, latencyMs: 87 },
+            ],
+            ok: true,
+          },
+        },
+      }
+      const fakePortal = startFakePortal(state, appUrl)
+      try {
+        const res = await runCli([
+          'smoketest',
+          '--portal-url', `http://localhost:${fakePortal.port}`,
+          '--app-slug', 'fast',
+        ])
+        expect(res.exitCode).toBe(0)
+        expect(res.stdout).toContain('[1/3] Registry check')
+        expect(res.stdout).toContain('handoff_mode=one_time_code')
+        expect(res.stdout).toContain('[2/3] App URL reachable')
+        expect(res.stdout).toContain('[3/3] Webhook delivery')
+        expect(res.stdout).toContain('Smoketest OK.')
+        expect(state.lastAuth).toBe('Bearer fake-token')
+      } finally {
+        fakePortal.stop()
+        fakeApp.stop()
+      }
+    })
+
+    it('exit 2 with "step 1: app not registered" message on 404', async () => {
+      const fakeApp = startFakeApp({ rootStatus: 200 })
+      const appUrl = `http://localhost:${fakeApp.port}`
+      const state: FakePortalState = {
+        lastAuth: null,
+        response: { status: 404, body: { error: 'app_not_registered', reason: 'no row' } },
+      }
+      const fakePortal = startFakePortal(state, appUrl)
+      try {
+        const res = await runCli([
+          'smoketest',
+          '--portal-url', `http://localhost:${fakePortal.port}`,
+          '--app-slug', 'missing',
+        ])
+        expect(res.exitCode).toBe(2)
+        expect(res.stdout).toContain('[1/3] Registry check     → FAILED')
+        expect(res.stdout.toLowerCase()).toMatch(/not registered|404/)
+        expect(res.stdout).toContain('Smoketest FAILED.')
+      } finally {
+        fakePortal.stop()
+        fakeApp.stop()
+      }
+    })
+
+    it('exit 3 when the app URL is unreachable', async () => {
+      // Pretend the app responds 500 — the CLI's step-2 probe will see non-2xx.
+      const fakeApp = startFakeApp({ rootStatus: 500 })
+      const appUrl = `http://localhost:${fakeApp.port}`
+      const state: FakePortalState = {
+        lastAuth: null,
+        response: {
+          status: 200,
+          body: {
+            app: {
+              id: 'app-1', slug: 'fast', name: 'Fast', url: '__APP_URL__',
+              status: 'active', handoffMode: 'one_time_code',
+            },
+            endpoints: [],
+            ok: true,
+          },
+        },
+      }
+      const fakePortal = startFakePortal(state, appUrl)
+      try {
+        const res = await runCli([
+          'smoketest',
+          '--portal-url', `http://localhost:${fakePortal.port}`,
+          '--app-slug', 'fast',
+        ])
+        expect(res.exitCode).toBe(3)
+        expect(res.stdout).toContain('[2/3] App URL reachable')
+        expect(res.stdout).toContain('Smoketest FAILED.')
+      } finally {
+        fakePortal.stop()
+        fakeApp.stop()
+      }
+    })
+
+    it('exit 3 when an endpoint returns non-2xx (portal ok=false)', async () => {
+      const fakeApp = startFakeApp({ rootStatus: 200 })
+      const appUrl = `http://localhost:${fakeApp.port}`
+      const state: FakePortalState = {
+        lastAuth: null,
+        response: {
+          status: 200,
+          body: {
+            app: {
+              id: 'app-1', slug: 'fast', name: 'Fast', url: '__APP_URL__',
+              status: 'active', handoffMode: 'one_time_code',
+            },
+            endpoints: [
+              {
+                endpointId: 'ep-1', url: '__APP_URL__/webhook', status: 500, latencyMs: 142,
+                error: 'HTTP 500 Server Error',
+              },
+            ],
+            ok: false,
+          },
+        },
+      }
+      const fakePortal = startFakePortal(state, appUrl)
+      try {
+        const res = await runCli([
+          'smoketest',
+          '--portal-url', `http://localhost:${fakePortal.port}`,
+          '--app-slug', 'fast',
+        ])
+        expect(res.exitCode).toBe(3)
+        expect(res.stdout).toMatch(/\[3\/3\] Webhook delivery/)
+        expect(res.stdout).toContain('status=500')
+        expect(res.stdout).toContain('Smoketest FAILED.')
+      } finally {
+        fakePortal.stop()
+        fakeApp.stop()
+      }
+    })
+
+    it('exit 1 on auth failure (portal returns 401)', async () => {
+      const fakeApp = startFakeApp({ rootStatus: 200 })
+      const appUrl = `http://localhost:${fakeApp.port}`
+      const state: FakePortalState = {
+        lastAuth: null,
+        response: { status: 401, body: { error: 'unauthorized', reason: 'missing_token' } },
+      }
+      const fakePortal = startFakePortal(state, appUrl)
+      try {
+        const res = await runCli([
+          'smoketest',
+          '--portal-url', `http://localhost:${fakePortal.port}`,
+          '--app-slug', 'fast',
+        ])
+        expect(res.exitCode).toBe(1)
+        expect(res.stdout).toMatch(/\[1\/3\] Registry check     → FAILED/)
+      } finally {
+        fakePortal.stop()
+        fakeApp.stop()
+      }
+    })
+
+    it('--health-path overrides the probe target', async () => {
+      const fakeApp = startFakeApp({ rootStatus: 500 }) // root would fail; /healthz returns 200
+      const appUrl = `http://localhost:${fakeApp.port}`
+      const state: FakePortalState = {
+        lastAuth: null,
+        response: {
+          status: 200,
+          body: {
+            app: {
+              id: 'app-1', slug: 'fast', name: 'Fast', url: '__APP_URL__',
+              status: 'active', handoffMode: 'one_time_code',
+            },
+            endpoints: [],
+            ok: true,
+          },
+        },
+      }
+      const fakePortal = startFakePortal(state, appUrl)
+      try {
+        const res = await runCli([
+          'smoketest',
+          '--portal-url', `http://localhost:${fakePortal.port}`,
+          '--app-slug', 'fast',
+          '--health-path', '/healthz',
+        ])
+        expect(res.exitCode).toBe(0)
+        expect(res.stdout).toContain('/healthz')
+        expect(res.stdout).toContain('Smoketest OK.')
+      } finally {
+        fakePortal.stop()
+        fakeApp.stop()
+      }
+    })
+
+    it('exit 2 when --portal-url or --app-slug is missing', async () => {
+      const res = await runCli(['smoketest', '--app-slug', 'fast'])
+      expect(res.exitCode).toBe(2)
+    })
+  })
+
   // Production-grade pre-minted token path (Spec 02 §HB CD-pipeline path).
   // The CD environment mints the OIDC ID token externally (e.g. via
   // google-github-actions/auth `token_format: 'id_token'`) and supplies it
