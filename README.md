@@ -1,144 +1,219 @@
 # @coms-portal/sdk
 
-Framework-neutral TypeScript SDK for COMS portal integrators. Verify broker tokens,
-validate webhook signatures, and query portal APIs — without any framework dependencies.
+Onboarding SDK for COMS portal integrators (H-apps). Verify broker tokens,
+handle typed webhooks, register manifests as code, and wire your Elysia routes
+in roughly 30 lines of glue.
 
 ## Requirements
 
 - Bun ≥ 1.0 or Node.js ≥ 18
-- TypeScript ≥ 5.0 (ESM project)
+- TypeScript ≥ 5 (ESM-only)
 
 ## Installation
 
 ```bash
-bun add git+https://github.com/mrdoorba/coms-sdk.git#v0.1.0
+bun add git+https://github.com/mrdoorba/coms-sdk.git#v1.0.0
 # or
-npm install git+https://github.com/mrdoorba/coms-sdk.git#v0.1.0
+npm install git+https://github.com/mrdoorba/coms-sdk.git#v1.0.0
 ```
 
-## Exports
+For the default `registerManifest` ID-token path you also want
+`google-auth-library` (declared as an optional peer dep):
 
-### `verifyBrokerToken(token, options)`
+```bash
+bun add google-auth-library
+```
 
-Verify a COMS portal broker token. Supports ES256 (JWKS-backed) and HS256 (shared-secret).
-Throws a typed `BrokerTokenError` on failure.
+For the Elysia adapter:
+
+```bash
+bun add elysia
+```
+
+## Quick start — the full H-app integration
 
 ```typescript
-import { verifyBrokerToken, BrokerTokenError } from '@coms-portal/sdk'
+// portal-manifest.ts
+import { defineManifest } from '@coms-portal/sdk'
 
-// ES256 (recommended — uses portal JWKS endpoint)
-try {
-  const payload = await verifyBrokerToken(token, {
-    appSlug: 'my-app',
+export default defineManifest({
+  appId: 'heroes',
+  displayName: 'Heroes',
+  schemaVersion: 2,
+  configSchema: {
+    weeklyDigestDay: { type: 'enum', values: ['mon', 'tue', 'wed', 'thu', 'fri'], default: 'fri' },
+    notifyOnAssignment: { type: 'boolean', default: true },
+  },
+  taxonomies: ['team', 'department'],
+})
+```
+
+```typescript
+// server.ts
+import { Elysia } from 'elysia'
+import { requireBrokerAuth } from '@coms-portal/sdk/elysia'
+import { defineWebhookHandler, verifyWebhookSignature } from '@coms-portal/sdk'
+
+const app = new Elysia()
+  .use(requireBrokerAuth({
+    appSlug: 'heroes',
     jwksUrl: 'https://coms.ahacommerce.net/.well-known/jwks.json',
-    issuer: ['https://coms.ahacommerce.net/broker', 'coms-portal-broker'],
-  })
-  console.log('User:', payload.email, 'Role:', payload.portalRole)
-} catch (err) {
-  if (err instanceof BrokerTokenError) {
-    // err.code is one of:
-    // 'expired' | 'invalid_signature' | 'invalid_audience' | 'invalid_issuer'
-    // 'missing_kid' | 'unknown_kid' | 'malformed'
-    console.error('Token rejected:', err.code, err.message)
-  }
-}
+  }))
+  .get('/me', ({ user }) => ({ portalSub: user.userId, role: user.portalRole }))
 
-// HS256 (legacy — per-app shared secret)
-const payload = await verifyBrokerToken(token, {
-  appSlug: 'my-app',
-  sharedSecret: process.env.PORTAL_BROKER_SIGNING_SECRET!,
+const handlePortalEvents = defineWebhookHandler({
+  'user.provisioned': async ({ payload }) => { /* … */ },
+  'user.updated':     async ({ payload }) => { /* … */ },
+  'user.offboarded':  async ({ payload }) => { /* … */ },
+})
+
+app.post('/portal/webhook', async ({ request }) => {
+  const body = await request.text()
+  const ok = verifyWebhookSignature(
+    process.env.WEBHOOK_SECRET!,
+    request.headers.get('x-portal-webhook-timestamp')!,
+    body,
+    request.headers.get('x-portal-webhook-signature')!,
+  )
+  if (!ok) return new Response('Invalid signature', { status: 401 })
+  await handlePortalEvents(JSON.parse(body))
+  return new Response('OK')
 })
 ```
 
-### `verifyWebhookSignature(payload, signature, secret, timestamp)`
+CD pipeline:
 
-Verify a COMS portal webhook signature using constant-time HMAC-SHA256 comparison.
-
-```typescript
-import { verifyWebhookSignature } from '@coms-portal/sdk'
-
-// In your webhook handler:
-const body = await request.text()
-const signature = request.headers.get('x-portal-webhook-signature') ?? ''
-const timestamp = request.headers.get('x-portal-webhook-timestamp') ?? ''
-
-if (!verifyWebhookSignature(process.env.WEBHOOK_SECRET!, timestamp, body, signature)) {
-  return new Response('Invalid signature', { status: 401 })
-}
-
-const event = JSON.parse(body)
+```bash
+coms-portal-cli register-manifest \
+  --portal-url https://coms.ahacommerce.net \
+  --app-slug heroes \
+  --manifest ./portal-manifest.ts
 ```
 
-### `resolveAlias(client, names)`
+That's the full H-app integration. No crypto code, no envelope-shape
+declarations, no manifest-as-form-fill.
 
-Resolve up to 1000 alias names to portal identities in one call.
-Rate-limited at 20 RPS / 40 burst per app token.
+## Surface (v1.0)
 
-```typescript
-import { resolveAlias } from '@coms-portal/sdk'
+### Auth
 
-const client = {
-  baseUrl: 'https://coms.ahacommerce.net',
-  brokerToken: myBrokerToken,
-}
+- `verifyBrokerToken(token, options)` — ES256 (JWKS) and HS256 (shared
+  secret) broker-token verification. Throws typed `BrokerTokenError`. Set
+  `strictContractVersion: true` to reject future major auth contracts.
+- `BrokerTokenError` — `code: 'expired' | 'invalid_signature' |
+  'invalid_audience' | 'invalid_issuer' | 'missing_kid' | 'unknown_kid' |
+  'malformed'`.
 
-const { results, rateLimitHeaders } = await resolveAlias(client, [
-  'alice@example.com',
-  'emp-001',
-])
+### Webhooks
 
-for (const result of results) {
-  if (result.match) {
-    console.log(result.input, '->', result.match.portalSub)
-  }
-}
+- `verifyWebhookSignature(secret, timestamp, body, signature)` — HMAC-SHA256
+  constant-time verifier.
+- `signWebhookPayload(secret, timestamp, body)` — symmetric helper.
+- `defineWebhookHandler(map, options?)` — typed dispatcher. `map[E]` is
+  invoked with `{ payload, envelope }` typed via `PayloadFor<E>`. Pass
+  `{ strictContractVersion: true }` to reject envelopes from a future
+  major webhook contract.
+- `WebhookEnvelopeError` — `code: 'malformed' | 'unknown_event'`.
+- `getAppRole(envelope, options?)` — extract the resolved app-local role
+  from `user.provisioned` / `user.updated` envelopes. Returns `null`
+  otherwise.
+
+### Manifest
+
+- `defineManifest(definition)` — author-time identity helper that
+  type-checks your `portal-manifest.ts`.
+- `registerManifest({ portalUrl, manifest, getIdToken?, fetch? })` —
+  POSTs to `${portalUrl}/api/v1/apps/:slug/manifest`. Default `getIdToken`
+  uses `google-auth-library` (lazy import). Returns `{ schemaVersion,
+  registeredAt }`.
+
+### Contract versions
+
+- `PORTAL_AUTH_CONTRACT_VERSION` / `PORTAL_WEBHOOK_CONTRACT_VERSION` —
+  re-exported constants pinning the SDK's supported max.
+- `assertContractVersionCompatible(received, supported, kind)` — Stripe-
+  Version-style assertion.
+- `ContractVersionMismatchError` — `code:
+  'auth_version_mismatch' | 'webhook_version_mismatch'`.
+
+### Client helpers (preserved from v0.1.x)
+
+- `resolveAlias`, `introspectSession`, `getAuditLog` — thin HTTP clients.
+
+### Re-exports from `@coms-portal/shared`
+
+H-apps import every contract type from `@coms-portal/sdk` directly:
+`PortalWebhookEnvelope`, per-event payloads, `PortalSessionUser`,
+`PortalRole`, `PortalIntegrationManifest`, header constants, etc.
+
+## Subpaths
+
+| Import path | Purpose |
+|---|---|
+| `@coms-portal/sdk` | Framework-neutral primary surface |
+| `@coms-portal/sdk/elysia` | `requireBrokerAuth` Elysia plugin |
+| `@coms-portal/sdk/testing` | `mintTestBrokerToken`, `buildEnvelope`, `stubJwks` for unit tests |
+
+## CLI
+
+The package ships a `coms-portal-cli` binary on `$PATH` after install. One
+verb today:
+
+```bash
+coms-portal-cli register-manifest --portal-url <url> --app-slug <slug> --manifest <path>
 ```
 
-### `introspectSession(client, params)`
+Exit codes: `0` success, `1` auth failure, `2` validation failure (slug
+mismatch, malformed manifest, missing args), `3` network / portal 5xx. Auth
+uses Application Default Credentials (Cloud Run / GCB / GCE inherit
+automatically).
 
-Check whether a user's portal session is still active (not revoked, user still active,
-app still accessible).
+## Testing your H-app
 
 ```typescript
-import { introspectSession } from '@coms-portal/sdk'
+import { mintTestBrokerToken, stubJwks, buildEnvelope } from '@coms-portal/sdk/testing'
+import { Elysia } from 'elysia'
+import { requireBrokerAuth } from '@coms-portal/sdk/elysia'
 
-const response = await introspectSession(client, {
-  userId: payload.userId,
-  sessionIssuedAt: payload.sessionIssuedAt,
-  appSlug: 'my-app',
+test('GET /me returns the portal user', async () => {
+  const minted = await mintTestBrokerToken({ appSlug: 'heroes', userId: 'u-1' })
+  const stub = stubJwks({ keys: [minted.jwk] })
+
+  const app = new Elysia()
+    .use(requireBrokerAuth({ appSlug: 'heroes', jwksUrl: stub.url, issuer: minted.issuer }))
+    .get('/me', ({ user }) => ({ id: user.userId }))
+
+  const res = await app.handle(
+    new Request('http://localhost/me', { headers: { Authorization: `Bearer ${minted.token}` } }),
+  )
+  expect(await res.json()).toEqual({ id: 'u-1' })
+
+  stub.restore()
 })
-
-if (!response.active) {
-  // Session was revoked — force re-authentication
-  redirect('/login')
-}
 ```
 
-### `getAuditLog(client, params)`
+## Migration from v0.1.x
 
-Retrieve audit log entries scoped to your app's tenant. Authenticated via broker token.
+The v0.1.x export surface is preserved verbatim in v1.0. Existing imports
+keep working with no code changes; just bump the pinned tag:
 
-```typescript
-import { getAuditLog } from '@coms-portal/sdk'
-
-const { entries, nextCursor } = await getAuditLog(client, {
-  from: new Date(Date.now() - 86_400_000).toISOString(), // last 24h
-  limit: 50,
-})
-
-// Paginate:
-if (nextCursor) {
-  const nextPage = await getAuditLog(client, { cursor: nextCursor, limit: 50 })
-}
+```diff
+-"@coms-portal/sdk": "git+https://github.com/mrdoorba/coms-sdk.git#v0.1.1"
++"@coms-portal/sdk": "git+https://github.com/mrdoorba/coms-sdk.git#v1.0.0"
 ```
+
+See [MIGRATION.md](./MIGRATION.md) for the full walkthrough of which v1.0
+features replace which v0.1.x patterns.
 
 ## Versioning
 
-This SDK follows [Semantic Versioning](https://semver.org/). Breaking changes
-increment the major version. See [CHANGELOG.md](./CHANGELOG.md) for release notes
-and [SUPPORTED_VERSIONS.md](./SUPPORTED_VERSIONS.md) for the support matrix.
+The 1.x line is semver-stable. Breaking changes ship in v2.0 (planned: HS256
+verify removal, gated on Heroes Phase 7). See
+[CHANGELOG.md](./CHANGELOG.md) for release notes and
+[SUPPORTED_VERSIONS.md](./SUPPORTED_VERSIONS.md) for the support matrix.
 
 ## Security
 
-Report security issues to the portal team directly. Do not open public GitHub issues
-for security vulnerabilities.
+Report security issues to the portal team directly at
+coms@ahacommerce.net. Do not open public GitHub issues for security
+vulnerabilities.

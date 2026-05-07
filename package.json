@@ -1,6 +1,6 @@
 {
   "name": "@coms-portal/sdk",
-  "version": "0.8.0",
+  "version": "1.0.0",
   "description": "Framework-neutral SDK for COMS portal integrators",
   "type": "module",
   "license": "UNLICENSED",

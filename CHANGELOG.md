@@ -5,15 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] (v1.0 milestone)
+## [1.0.0] - 2026-05-07
 
-Working release line for the SDK v1.0 surface (Rev 4 Spec 01). Each PR (A–H)
-ships as its own minor version (`0.2.0` → `0.8.0`); PR H cuts `1.0.0` and
-locks the surface under semver. The v0.1.x surface (`verifyBrokerToken`,
-`verifyWebhookSignature`, `signWebhookPayload`, `resolveAlias`,
-`introspectSession`, `getAuditLog`) is preserved verbatim through the entire
-1.x line — the v1.0 additions are purely additive. HS256 verification stays
-in v1.x and is removed in v2.0 once Heroes Phase 7 lands.
+The first semver-stable release. Surface lock per Rev 4 Spec 01. The
+v0.1.x export surface (`verifyBrokerToken`, `verifyWebhookSignature`,
+`signWebhookPayload`, `resolveAlias`, `introspectSession`,
+`getAuditLog`) is preserved verbatim — bumping a v0.1.1 consumer to
+v1.0.0 requires no code changes. The v1.0 additions below are purely
+additive opt-ins.
+
+HS256 broker-token verification is preserved in the entire 1.x line and
+removed in v2.0, gated on Heroes Phase 7.
+
+### Added since v0.1.x (cumulative summary)
+
+- **Typed webhook envelope dispatch** — `defineWebhookHandler` with
+  per-event payload types via `PayloadFor<E>`; `WebhookEnvelopeError`
+  with discriminated `code`.
+- **Role envelope reader** — `getAppRole(envelope, options?)`.
+- **Contract-version surface** — `PORTAL_AUTH_CONTRACT_VERSION`,
+  `PORTAL_WEBHOOK_CONTRACT_VERSION`, `assertContractVersionCompatible`,
+  `ContractVersionMismatchError`, opt-in `strictContractVersion` on
+  `verifyBrokerToken` and `defineWebhookHandler`.
+- **Manifest helpers** — `defineManifest`, `registerManifest`,
+  `ManifestDefinition` and per-variant field types.
+- **`coms-portal-cli` binary** — `register-manifest` subcommand,
+  exit codes 0/1/2/3.
+- **Elysia adapter at `@coms-portal/sdk/elysia`** — `requireBrokerAuth`
+  plugin attaches `user: BrokerTokenPayload` to context.
+- **Test-kit at `@coms-portal/sdk/testing`** — `mintTestBrokerToken`,
+  `buildEnvelope`, `stubJwks`.
+- **Type re-exports from `@coms-portal/shared`** — H-apps now import
+  every contract type from `@coms-portal/sdk` directly. `@coms-portal/shared`
+  is a runtime dep of the SDK pinned at `v1.6.0`.
+- **Optional peer deps** — `elysia ^1`, `google-auth-library ^9 || ^10`.
+
+### Pre-release minors (archived)
+
+The PR-by-PR work that landed v1.0 was tagged on `0.2.0` through
+`0.8.0`. Those tags remain on the repo; the per-minor entries below are
+preserved for archival reference. See the corresponding commit messages
+for the design rationale of each PR.
 
 ### Added in 0.8.0
 

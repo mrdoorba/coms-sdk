@@ -1,18 +1,20 @@
 # Supported Versions
 
-| Version | Status                       | Security Fixes Until    |
-|---------|------------------------------|-------------------------|
-| 0.2.x   | Pre-release (v1.0 milestone) | Superseded by v1.0 cut  |
-| 0.1.x   | Active                       | Current                 |
+| Version | Status         | Security Fixes Until                |
+|---------|----------------|-------------------------------------|
+| 1.0.x   | Active         | Current                             |
+| 0.2–0.8 | Archived       | None — superseded by 1.0.0          |
+| 0.1.x   | Security-only  | Until v2.0 cut (HS256 removal)      |
 
 Versions not listed above are no longer supported and will not receive security updates.
 
 ## Support Policy
 
-- **Active** — receives new features, bug fixes, and security patches.
-- **Pre-release (v1.0 milestone)** — working release line that lands the SDK v1.0 surface PR-by-PR (A–H per Rev 4 Spec 01). Each minor (`0.2.0` → `0.8.0`) is consumable but not semver-stable; consumers should pin to an exact tag in their `package.json`. The v0.1.x export surface remains backwards-compatible across the entire pre-release line. Once PR H cuts `1.0.0`, this row collapses to the v1.0 row.
-- **Security-only** — receives security patches only; no new features or bug fixes.
-- **Unsupported** — no longer maintained. Upgrade to an active version.
+- **Active** — receives new features, bug fixes, and security patches. Consumers may pin via semver range (`^1.0.0`).
+- **Security-only** — receives security patches only; no new features or bug fixes. Consumers should plan migration to the Active line.
+- **Archived** — pre-release versions cut on the path to v1.0.0 (`0.2.0` through `0.8.0`, one per Rev 4 Spec 01 PR). Tags remain on the repo for archival reference but receive no fixes; upgrade to `^1.0.0`.
+- **Unsupported** — no longer maintained.
 
-Pre-1.0 versions (0.x.x) may receive breaking changes between minor releases.
-Pin to a specific tag (`#v0.1.0`) in your package manager to avoid unexpected updates.
+The 1.x line is semver-stable. Breaking changes increment the major:
+v2.0 (planned) drops HS256 broker-token verification, gated on Heroes
+Phase 7.
