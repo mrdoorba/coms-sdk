@@ -1,0 +1,13 @@
+{
+  "name": "@coms-portal/sdk-example-v0-compat-smoketest",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Rev 4 Spec 02 §VA — proves a v0.1.x consumer's import surface resolves against the current SDK with zero code changes.",
+  "type": "module",
+  "scripts": {
+    "start": "bun run index.ts"
+  },
+  "dependencies": {
+    "@coms-portal/sdk": "file:../.."
+  }
+}
