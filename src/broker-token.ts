@@ -1,6 +1,10 @@
 import { jwtVerify, decodeProtectedHeader, createRemoteJWKSet } from 'jose'
 import type { JWTPayload, JWTVerifyOptions } from 'jose'
 import { BrokerTokenError } from './errors.js'
+import {
+  PORTAL_AUTH_CONTRACT_VERSION,
+  assertContractVersionCompatible,
+} from './contract-version.js'
 
 const jwksCache = new Map<string, ReturnType<typeof createRemoteJWKSet>>()
 
@@ -26,6 +30,13 @@ export type BrokerTokenPayload = JWTPayload & {
   teamIds: string[]
   apps: string[]
   redirectTo?: string | null
+  /**
+   * Optional contract-version claim emitted by future portal builds. When
+   * `verifyBrokerToken` is called with `strictContractVersion: true`, this
+   * field is asserted against `PORTAL_AUTH_CONTRACT_VERSION`. Absent today
+   * for backwards compatibility; strict mode is a no-op until present.
+   */
+  contractVersion?: number
 }
 
 export type VerifyBrokerTokenOptions = {
@@ -34,6 +45,14 @@ export type VerifyBrokerTokenOptions = {
    * Used to construct the expected audience `portal:app:<appSlug>`.
    */
   appSlug: string
+  /**
+   * When `true`, after successful signature/audience/issuer verification the
+   * decoded payload's `contractVersion` claim (if present) is asserted
+   * against `PORTAL_AUTH_CONTRACT_VERSION`. A future major version raises
+   * `ContractVersionMismatchError`. Default `false` for back-compat; safe to
+   * enable today (no-op until the portal starts emitting the claim).
+   */
+  strictContractVersion?: boolean
 } & (
   | {
       /**
@@ -109,6 +128,7 @@ export async function verifyBrokerToken(
       : {}),
   }
 
+  let payload: BrokerTokenPayload
   try {
     if (header.alg === 'ES256') {
       if (!options.jwksUrl) {
@@ -123,11 +143,9 @@ export async function verifyBrokerToken(
       }
 
       const JWKS = getJwks(options.jwksUrl)
-      const { payload } = await jwtVerify<BrokerTokenPayload>(token, JWKS, verifyOpts)
-      return payload
-    }
-
-    if (header.alg === 'HS256') {
+      const result = await jwtVerify<BrokerTokenPayload>(token, JWKS, verifyOpts)
+      payload = result.payload
+    } else if (header.alg === 'HS256') {
       if (!options.sharedSecret) {
         throw new BrokerTokenError(
           'malformed',
@@ -139,13 +157,22 @@ export async function verifyBrokerToken(
           ? new TextEncoder().encode(options.sharedSecret)
           : options.sharedSecret
 
-      const { payload } = await jwtVerify<BrokerTokenPayload>(token, secret, verifyOpts)
-      return payload
+      const result = await jwtVerify<BrokerTokenPayload>(token, secret, verifyOpts)
+      payload = result.payload
+    } else {
+      throw new BrokerTokenError(
+        'malformed',
+        `Unsupported token algorithm: ${header.alg ?? 'unknown'}`,
+      )
     }
-
-    throw new BrokerTokenError('malformed', `Unsupported token algorithm: ${header.alg ?? 'unknown'}`)
   } catch (err) {
     if (err instanceof BrokerTokenError) throw err
     throw mapJoseError(err)
   }
+
+  if (options.strictContractVersion && typeof payload.contractVersion === 'number') {
+    assertContractVersionCompatible(payload.contractVersion, PORTAL_AUTH_CONTRACT_VERSION, 'auth')
+  }
+
+  return payload
 }

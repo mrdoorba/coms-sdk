@@ -4,6 +4,10 @@ import type {
 } from '@coms-portal/shared/contracts/webhook-events'
 import { PORTAL_WEBHOOK_EVENTS } from '@coms-portal/shared/contracts/webhook-events'
 import type { PayloadFor } from './event-payload-map.js'
+import {
+  PORTAL_WEBHOOK_CONTRACT_VERSION,
+  assertContractVersionCompatible,
+} from './contract-version.js'
 
 export class WebhookEnvelopeError extends Error {
   readonly code: 'malformed' | 'unknown_event'
@@ -34,6 +38,15 @@ export type WebhookHandlerMap = {
 
 const KNOWN_EVENTS = new Set<string>(PORTAL_WEBHOOK_EVENTS)
 
+export interface DefineWebhookHandlerOptions {
+  /**
+   * When `true`, the dispatcher asserts the envelope's `contractVersion`
+   * against `PORTAL_WEBHOOK_CONTRACT_VERSION` before dispatching. A future
+   * major version raises `ContractVersionMismatchError`. Default `false`.
+   */
+  strictContractVersion?: boolean
+}
+
 /**
  * Build a typed webhook dispatcher. The returned function accepts a parsed
  * envelope (object form, not a raw string) and dispatches to the matching
@@ -50,7 +63,10 @@ const KNOWN_EVENTS = new Set<string>(PORTAL_WEBHOOK_EVENTS)
  *     return new Response('OK')
  *   })
  */
-export function defineWebhookHandler(map: WebhookHandlerMap): (envelope: unknown) => Promise<void> {
+export function defineWebhookHandler(
+  map: WebhookHandlerMap,
+  options: DefineWebhookHandlerOptions = {},
+): (envelope: unknown) => Promise<void> {
   return async (envelope: unknown): Promise<void> => {
     if (!envelope || typeof envelope !== 'object') {
       throw new WebhookEnvelopeError('malformed', 'Webhook envelope is not an object')
@@ -61,6 +77,13 @@ export function defineWebhookHandler(map: WebhookHandlerMap): (envelope: unknown
     }
     if (!KNOWN_EVENTS.has(event)) {
       throw new WebhookEnvelopeError('unknown_event', `Unknown event: ${event}`)
+    }
+
+    if (options.strictContractVersion) {
+      const cv = (envelope as { contractVersion?: unknown }).contractVersion
+      if (typeof cv === 'number') {
+        assertContractVersionCompatible(cv, PORTAL_WEBHOOK_CONTRACT_VERSION, 'webhook')
+      }
     }
 
     const handler = map[event as PortalWebhookEvent]

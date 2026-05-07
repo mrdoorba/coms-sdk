@@ -15,6 +15,26 @@ locks the surface under semver. The v0.1.x surface (`verifyBrokerToken`,
 1.x line — the v1.0 additions are purely additive. HS256 verification stays
 in v1.x and is removed in v2.0 once Heroes Phase 7 lands.
 
+### Added in 0.4.0
+
+- **Contract-version constants.** `PORTAL_AUTH_CONTRACT_VERSION` and
+  `PORTAL_WEBHOOK_CONTRACT_VERSION` are now exported from the SDK, sourced
+  from `@coms-portal/shared` (currently `2` and `1` respectively). H-apps
+  can pin against these to catch drift at compile time.
+- **`assertContractVersionCompatible(received, supported, kind)`.** Stripe-
+  Version-style fail-loud helper. Throws `ContractVersionMismatchError`
+  (typed `code: 'auth_version_mismatch' | 'webhook_version_mismatch'`,
+  with `received` and `supported` numeric fields) when `Math.floor(received)
+  > supported`. Same-major minor bumps and missing/non-numeric inputs are
+  permitted by design.
+- **Opt-in strict mode for `verifyBrokerToken` and `defineWebhookHandler`.**
+  New options `strictContractVersion?: boolean` (default `false`). When
+  `true`, the SDK enforces the contract-version assertion on the decoded
+  payload's `contractVersion` claim / envelope field. Forward-compatible:
+  the assertion is a no-op when the field is absent (e.g. against a portal
+  that has not yet started emitting it), but starts biting the moment the
+  field appears.
+
 ### Added in 0.3.0
 
 - **Typed webhook envelope.** `defineWebhookHandler(map)` returns a

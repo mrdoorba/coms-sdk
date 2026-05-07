@@ -19,10 +19,27 @@ export type {
 // === v1.0 — typed webhook envelope + role envelope reader (PR B) ===
 
 export { defineWebhookHandler, WebhookEnvelopeError } from './webhook-typed.js'
-export type { WebhookHandlerMap, WebhookHandlerContext } from './webhook-typed.js'
+export type {
+  WebhookHandlerMap,
+  WebhookHandlerContext,
+  DefineWebhookHandlerOptions,
+} from './webhook-typed.js'
 export type { EventPayloadMap, PayloadFor } from './event-payload-map.js'
 export { getAppRole } from './role-envelope.js'
 export type { AppRole, GetAppRoleOptions } from './role-envelope.js'
+
+// === v1.0 — contract-version surface (PR C) ===
+
+export {
+  PORTAL_AUTH_CONTRACT_VERSION,
+  PORTAL_WEBHOOK_CONTRACT_VERSION,
+  assertContractVersionCompatible,
+  ContractVersionMismatchError,
+} from './contract-version.js'
+export type {
+  ContractVersionKind,
+  ContractVersionMismatchCode,
+} from './contract-version.js'
 
 // === v1.0 — re-exports from @coms-portal/shared (Q2: single import source) ===
 
