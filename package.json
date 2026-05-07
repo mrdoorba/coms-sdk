@@ -1,6 +1,6 @@
 {
   "name": "@coms-portal/sdk",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Framework-neutral SDK for COMS portal integrators",
   "type": "module",
   "license": "UNLICENSED",
@@ -16,6 +16,10 @@
     "./elysia": {
       "import": "./src/elysia.ts",
       "types": "./src/elysia.ts"
+    },
+    "./testing": {
+      "import": "./src/testing/index.ts",
+      "types": "./src/testing/index.ts"
     }
   },
   "bin": {

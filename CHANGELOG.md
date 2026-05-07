@@ -15,6 +15,28 @@ locks the surface under semver. The v0.1.x surface (`verifyBrokerToken`,
 1.x line — the v1.0 additions are purely additive. HS256 verification stays
 in v1.x and is removed in v2.0 once Heroes Phase 7 lands.
 
+### Added in 0.8.0
+
+- **Test-kit at `@coms-portal/sdk/testing`.** New subpath ships three
+  fakes used by every serious H-app test suite:
+  - `mintTestBrokerToken(opts?)` — signs an ES256 (default) or HS256
+    portal-shaped token using a freshly-generated JWK / secret. Returns
+    `{ token, jwk, sharedSecret?, appSlug, issuer }` so callers can pair
+    it with `stubJwks` (ES256) or pass the secret straight back to
+    `verifyBrokerToken` (HS256). All payload fields take sensible
+    defaults; pass partials to override.
+  - `buildEnvelope(event, payload, opts?)` — constructs a fully-typed
+    `PortalWebhookEnvelope<T>` matching the production wire shape, with
+    `contractVersion`, a fresh `eventId` (or seeded), and an ISO
+    `occurredAt`. Drops directly into `defineWebhookHandler`.
+  - `stubJwks(jwks)` — stands up a tiny `Bun.serve` HTTP server returning
+    the supplied JWKS at `/`. Returns `{ url, restore }`. Each stub gets
+    its own port so multiple parallel tests do not collide.
+- **No production-side fetch / network code in the test-kit.** The kit
+  uses `jose`'s key generators and `Bun.serve`; nothing in the production
+  surface depends on `@coms-portal/sdk/testing`, so importers of the main
+  surface pay zero cost.
+
 ### Added in 0.7.0
 
 - **Elysia adapter at `@coms-portal/sdk/elysia`.** New subpath ships
