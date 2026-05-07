@@ -1,0 +1,19 @@
+{
+  "name": "@coms-portal/sdk-example-web-bundle-smoketest",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Rev 4 Spec 02 D1 regression canary — proves the SDK's APP_LAUNCHER subpath bundles cleanly in a browser context (no node:crypto, no google-auth-library). Closes mrdoorba/coms-sdk#1.",
+  "type": "module",
+  "scripts": {
+    "test": "bun test",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@coms-portal/sdk": "file:../.."
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.9.3",
+    "vite": "^5"
+  }
+}
