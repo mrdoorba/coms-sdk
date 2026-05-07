@@ -1,0 +1,18 @@
+{
+  "name": "@coms-portal/sdk-example-onboarding-scratch",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Rev 4 Spec 02 §VB — minimal Elysia H-app reproducing Spec 01 §Surface 'Sample H-app integration'. Records actual LOC against the '~30 lines' claim. Closes Spec 01 §AC #1.",
+  "type": "module",
+  "scripts": {
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@coms-portal/sdk": "file:../..",
+    "elysia": "^1"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.9.3"
+  }
+}
