@@ -4,7 +4,6 @@ import {
   generateKeyPair,
   exportJWK,
   importJWK,
-  type KeyLike,
 } from 'jose'
 import { verifyBrokerToken, BrokerTokenError, getJwks } from '../broker-token.js'
 
@@ -25,7 +24,7 @@ const BASE_PAYLOAD = {
   apps: [APP_SLUG],
 }
 
-let es256PrivateKey: KeyLike
+let es256PrivateKey: CryptoKey
 let es256PublicJwk: Record<string, unknown>
 let mockJwksServer: { url: string; stop: () => void } | null = null
 

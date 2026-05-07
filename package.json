@@ -1,6 +1,6 @@
 {
   "name": "@coms-portal/sdk",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Framework-neutral SDK for COMS portal integrators",
   "type": "module",
   "license": "UNLICENSED",
@@ -22,6 +22,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@coms-portal/shared": "git+https://github.com/mrdoorba/coms-shared.git#v1.6.0",
     "jose": "^6"
   },
   "devDependencies": {

@@ -104,7 +104,9 @@ export async function verifyBrokerToken(
   const verifyOpts: JWTVerifyOptions = {
     audience,
     issuer,
-    algorithms: header.alg === 'ES256' ? ['ES256'] : header.alg === 'HS256' ? ['HS256'] : undefined,
+    ...(header.alg === 'ES256' || header.alg === 'HS256'
+      ? { algorithms: [header.alg] }
+      : {}),
   }
 
   try {
