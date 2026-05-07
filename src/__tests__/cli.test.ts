@@ -140,4 +140,45 @@ describe('coms-portal-cli register-manifest', () => {
     const res = await runCli(['nuke-everything'])
     expect(res.exitCode).toBe(2)
   })
+
+  // Production-grade pre-minted token path (Spec 02 §HB CD-pipeline path).
+  // The CD environment mints the OIDC ID token externally (e.g. via
+  // google-github-actions/auth `token_format: 'id_token'`) and supplies it
+  // through COMS_PORTAL_CLI_OIDC_TOKEN so the CLI does not invoke
+  // google-auth-library at all — necessary for WIF + service-account
+  // impersonation chains that getIdTokenClient cannot handle.
+  it('uses COMS_PORTAL_CLI_OIDC_TOKEN as the bearer when set (production CD path)', async () => {
+    const manifestPath = writeManifest('valid-oidc.ts', validManifestSrc)
+    nextResponse = { status: 200, body: { schemaVersion: 2, registeredAt: '2026-05-07T12:00:00.000Z' } }
+    const captured: { auth: string | null } = { auth: null }
+    const oidcServer = Bun.serve({
+      port: 0,
+      async fetch(req) {
+        captured.auth = req.headers.get('authorization')
+        return new Response(JSON.stringify(nextResponse.body), { status: 200 })
+      },
+    })
+    try {
+      const portalUrl = `http://localhost:${oidcServer.port}`
+      const proc = Bun.spawn(
+        ['bun', 'run', join(import.meta.dir, '..', 'cli.ts'),
+          'register-manifest',
+          '--portal-url', portalUrl,
+          '--app-slug', 'heroes',
+          '--manifest', manifestPath,
+        ],
+        {
+          // Note: NO COMS_PORTAL_CLI_TEST_TOKEN — only the production env var.
+          env: { ...process.env, COMS_PORTAL_CLI_OIDC_TOKEN: 'preminted-oidc-token-xyz' },
+          stdout: 'pipe',
+          stderr: 'pipe',
+        },
+      )
+      const exitCode = await proc.exited
+      expect(exitCode).toBe(0)
+      expect(captured.auth).toBe('Bearer preminted-oidc-token-xyz')
+    } finally {
+      oidcServer.stop()
+    }
+  })
 })

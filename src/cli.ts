@@ -24,9 +24,17 @@ Usage:
     --app-slug <slug> \\
     --manifest <path>
 
-Auth: requires Application Default Credentials (Cloud Run / GCB / GCE
-inherit them automatically; locally, run \`gcloud auth application-default
-login\` or set GOOGLE_APPLICATION_CREDENTIALS).
+Auth (in priority order):
+  1. COMS_PORTAL_CLI_OIDC_TOKEN env var — a pre-minted OIDC ID token
+     whose audience equals --portal-url. Use this in CD pipelines that
+     mint tokens externally (e.g. google-github-actions/auth with
+     token_format: 'id_token'). Bypasses google-auth-library entirely.
+  2. Application Default Credentials. Cloud Run / GCB / GCE inherit
+     them automatically; locally, run \`gcloud auth application-default
+     login\` or set GOOGLE_APPLICATION_CREDENTIALS. Note: ADC paths
+     using external_account credentials (WIF) with service-account
+     impersonation cannot mint OIDC ID tokens through google-auth-
+     library's getIdTokenClient — use #1 for those workflows.
 
 Exit codes: 0 success, 1 auth failure, 2 validation, 3 network/portal.`
 
@@ -99,14 +107,23 @@ async function runRegisterManifest(rest: string[]): Promise<void> {
     )
   }
 
-  // Test-only bypass — never use in production. The unit tests set this so
-  // they don't need ADC / a working metadata server. The branch is gated on
-  // a uniquely-named env var so production CD pipelines cannot accidentally
-  // trip it.
+  // Two pre-minted-token paths bypass google-auth-library:
+  //   COMS_PORTAL_CLI_TEST_TOKEN — test-only; the unit tests set this so
+  //     they don't need ADC / a working metadata server. The unique name
+  //     prevents production CD from accidentally tripping it.
+  //   COMS_PORTAL_CLI_OIDC_TOKEN — production-grade; CD environments that
+  //     mint ID tokens externally (e.g. google-github-actions/auth with
+  //     token_format: 'id_token') set this so the CLI does not invoke
+  //     google-auth-library at all. Necessary for WIF + service-account
+  //     impersonation chains, where getIdTokenClient cannot mint ID
+  //     tokens locally.
   const testToken = process.env.COMS_PORTAL_CLI_TEST_TOKEN
+  const oidcToken = process.env.COMS_PORTAL_CLI_OIDC_TOKEN
   const getIdToken = testToken
     ? async () => testToken
-    : undefined
+    : oidcToken
+      ? async () => oidcToken
+      : undefined
 
   let result
   try {

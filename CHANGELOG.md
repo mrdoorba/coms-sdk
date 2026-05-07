@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-05-07
+
+Additive: `coms-portal-cli register-manifest` now accepts a pre-minted OIDC ID token via `COMS_PORTAL_CLI_OIDC_TOKEN`.
+
+When set, the CLI uses the env var's value as the `Authorization: Bearer …` header verbatim and does not invoke `google-auth-library`. Necessary for CD environments that mint ID tokens externally — particularly Workload Identity Federation with service-account impersonation, where `GoogleAuth.getIdTokenClient` cannot mint local ID tokens through the impersonation chain and fails with "Cannot fetch ID token in this environment". The canonical CD pattern with `google-github-actions/auth` is now:
+
+```yaml
+- uses: google-github-actions/auth@v3
+  id: auth
+  with:
+    workload_identity_provider: ...
+    service_account: <runtime-sa>@...
+    token_format: 'id_token'
+    id_token_audience: '<portal-url>'
+    id_token_include_email: true
+- run: bun x coms-portal-cli register-manifest --portal-url ... --app-slug ... --manifest ...
+  env:
+    COMS_PORTAL_CLI_OIDC_TOKEN: ${{ steps.auth.outputs.id_token }}
+```
+
+The existing ADC path (`new GoogleAuth().getIdTokenClient(audience)`) remains the default when `COMS_PORTAL_CLI_OIDC_TOKEN` is absent — works on Cloud Run / GCB / GCE / local `gcloud auth application-default login`. The test-only `COMS_PORTAL_CLI_TEST_TOKEN` env var is unchanged and takes precedence over both for unit tests.
+
+No surface change beyond the new env var. v1.1.x consumers are unaffected.
+
 ## [1.1.1] - 2026-05-07
 
 Bugfix: unblock browser-bundle consumers (Heroes' SvelteKit `(authed)/+layout.svelte`).
