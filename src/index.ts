@@ -142,3 +142,9 @@ export {
   createPortalIntegrationManifest,
   validatePortalIntegrationManifest,
 } from '@coms-portal/shared/contracts/integration-manifest'
+
+// === v1.1 — APP_LAUNCHER re-export (Rev 4 Spec 02 §SA) ===
+// Single-source-of-truth import path for H-apps still rendering the cross-app
+// launcher. Carries shared's @deprecated marker through re-export.
+
+export { APP_LAUNCHER } from '@coms-portal/shared/constants/app-launcher'
