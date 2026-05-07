@@ -15,6 +15,22 @@ locks the surface under semver. The v0.1.x surface (`verifyBrokerToken`,
 1.x line — the v1.0 additions are purely additive. HS256 verification stays
 in v1.x and is removed in v2.0 once Heroes Phase 7 lands.
 
+### Added in 0.6.0
+
+- **`coms-portal-cli` binary.** `bun add @coms-portal/sdk` now puts a
+  `coms-portal-cli` command on `$PATH` (via the `bin` entry in
+  package.json). One subcommand: `register-manifest --portal-url <url>
+  --app-slug <slug> --manifest <path>`. Loads the H-app's
+  `portal-manifest.ts` via dynamic import, asserts the slug matches the
+  manifest's `appId`, and POSTs through `registerManifest`. Argument
+  parsing uses `node:util.parseArgs` — no external CLI framework
+  dependency.
+- **Discriminated exit codes.** `0` success / idempotent no-op,
+  `1` auth failure (no GCP creds, app not registered with
+  serviceAccountEmail), `2` manifest validation (shape, missing args, slug
+  mismatch), `3` network or portal 5xx. CD pipelines branch on these
+  without parsing stderr.
+
 ### Added in 0.5.0
 
 - **Manifest authoring helpers.** `defineManifest(def)` is an identity
