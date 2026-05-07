@@ -15,6 +15,26 @@ locks the surface under semver. The v0.1.x surface (`verifyBrokerToken`,
 1.x line — the v1.0 additions are purely additive. HS256 verification stays
 in v1.x and is removed in v2.0 once Heroes Phase 7 lands.
 
+### Added in 0.3.0
+
+- **Typed webhook envelope.** `defineWebhookHandler(map)` returns a
+  dispatcher that type-discriminates on `envelope.event` and invokes the
+  matching handler with `{ payload, envelope }` where both are typed via
+  `PayloadFor<E>`. Unknown events throw a typed `WebhookEnvelopeError` with
+  `code: 'malformed' | 'unknown_event'`. Unhandled known events are silent
+  no-ops so an H-app subscribes only to what it cares about.
+- **Role envelope reader.** `getAppRole(envelope, options?)` extracts the
+  resolved app-local role from `user.provisioned` / `user.updated`
+  envelopes per the 2026-05-06 portal role refactor. Returns `null` for
+  any other event, malformed input, or absent role. Optional
+  `expectedAppSlug` argument acts as a defensive sanity check on shared
+  receivers.
+- **Type re-exports from `@coms-portal/shared`.** H-apps now import every
+  contract type they need from `@coms-portal/sdk` — webhook payloads,
+  envelopes, headers, session/auth contracts, integration manifest types
+  and helpers. Heroes (and any consumer still importing from `shared`
+  directly) continues to work; this is purely additive.
+
 ### Added in 0.2.0
 
 - `@coms-portal/shared` is now a runtime dependency (pinned to `v1.6.0`),
