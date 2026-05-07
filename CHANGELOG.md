@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2026-05-07
+
+Bugfix: unblock browser-bundle consumers (Heroes' SvelteKit `(authed)/+layout.svelte`).
+
+The v1.1.0 top-level re-export of `APP_LAUNCHER` is correct for server-side
+consumers but tripped Vite/Rollup tree-shaking when imported from a
+browser entry: even with `"sideEffects": false` declared, the barrel's
+sibling re-exports from `webhook.ts` (`node:crypto`) and `manifest.ts`
+(lazy `google-auth-library`) kept those modules in the dependency graph,
+breaking the build with "createHmac is not exported by
+__vite-browser-external".
+
+Two changes ship together:
+- **Add `"sideEffects": false`** so any tree-shaking-aware bundler can
+  drop unused barrel exports cleanly. Verified safe — every runtime
+  module under `src/` is pure; only `src/cli.ts` holds top-level
+  `await main()`, and that file is the `bin` entry, never imported as a
+  module.
+- **Add `./constants/app-launcher` subpath** (`@coms-portal/sdk/constants/app-launcher`)
+  that re-exports the shared constant directly, with no barrel
+  scanning. Heroes' web layout (and any future browser-bundled consumer)
+  imports through this subpath; server-side consumers can keep the
+  top-level import.
+
+No breaking change. v1.1.0 consumers that only ship to a Node/Bun
+runtime are unaffected.
+
 ## [1.1.0] - 2026-05-07
 
 Additive: re-exports `APP_LAUNCHER` from `@coms-portal/shared/constants/app-launcher` so H-app consumers that render the cross-app launcher have the same single-import-source guarantee as the rest of the v1.0 surface (Rev 4 Spec 02 §Q1, §SA). The shared package's `@deprecated` marker propagates through the re-export — runtime behaviour and removal target are unchanged.

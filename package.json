@@ -1,9 +1,10 @@
 {
   "name": "@coms-portal/sdk",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Framework-neutral SDK for COMS portal integrators",
   "type": "module",
   "license": "UNLICENSED",
+  "sideEffects": false,
   "repository": {
     "type": "git",
     "url": "https://github.com/mrdoorba/coms-sdk.git"
@@ -20,6 +21,10 @@
     "./testing": {
       "import": "./src/testing/index.ts",
       "types": "./src/testing/index.ts"
+    },
+    "./constants/app-launcher": {
+      "import": "./src/constants/app-launcher.ts",
+      "types": "./src/constants/app-launcher.ts"
     }
   },
   "bin": {
